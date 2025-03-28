@@ -46,6 +46,34 @@ body {
   height: 100% !important;
 }
 
+.signature-pad-container {
+  position: relative;
+  background-color: white;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.signature-pad-container:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Control group styles */
+.control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .control-group {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+}
+
 /* Add color picker styles */
 .color-picker-container {
   display: flex;
@@ -60,8 +88,18 @@ body {
   appearance: none;
   background-color: transparent;
   cursor: pointer;
+  width: 50px;
+  height: 40px;
   padding: 0;
   border: none;
+  border-radius: var(--border-radius-sm);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.color-picker-input:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-md);
 }
 
 .color-picker-input::-webkit-color-swatch {
@@ -72,6 +110,42 @@ body {
 .color-picker-input::-moz-color-swatch {
   border-radius: var(--border-radius-sm);
   border: 2px solid var(--border-color);
+}
+
+/* Pen size slider styles */
+.pen-size-slider {
+  width: 100%;
+  min-width: 150px;
+}
+
+/* Sample strokes for pen size visualization */
+.pen-size-samples {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.pen-stroke-sample {
+  height: 4px;
+  background-color: var(--primary-color);
+  border-radius: 2px;
+}
+
+.pen-stroke-sample.thin {
+  width: 20%;
+  height: 1px;
+}
+
+.pen-stroke-sample.medium {
+  width: 30%;
+  height: 3px;
+}
+
+.pen-stroke-sample.thick {
+  width: 50%;
+  height: 5px;
 }
 
 /* Update signature overlay styles to handle colored signatures */
@@ -159,7 +233,7 @@ body {
   z-index: 1000;
   background-color: transparent;
   border-radius: var(--border-radius-sm);
-  transition: var(--transition);
+  transition: all 0.1s ease;
   padding: 4px;
 }
 
@@ -172,7 +246,7 @@ body {
 .signature-overlay.active {
   z-index: 1001;
   cursor: grabbing;
-  outline: 2px solid var(--primary-color);
+  outline: 2px solid #6366f1;
   outline-offset: 2px;
   box-shadow: var(--shadow-md);
 }

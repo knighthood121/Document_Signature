@@ -7,11 +7,9 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CreateIcon from '@mui/icons-material/Create';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
-import TextFieldsIcon from '@mui/icons-material/TextFields';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import BrushIcon from '@mui/icons-material/Brush';
 import { Document, Page, pdfjs } from 'react-pdf';
 import './PDFEditor.css';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -35,13 +33,8 @@ const PDFEditor = () => {
   const [isDrawSignatureModalOpen, setIsDrawSignatureModalOpen] = useState(false);
   const [tempSignaturePosition, setTempSignaturePosition] = useState(null);
   const [annotations, setAnnotations] = useState([]);
-  const [drawingMode, setDrawingMode] = useState(false);
-  const [textMode, setTextMode] = useState(false);
-  const [textInput, setTextInput] = useState('');
   const [rotation, setRotation] = useState(0);
   const [signatureSize] = useState({ width: 150, height: 50 });
-  const [isTextModalOpen, setIsTextModalOpen] = useState(false);
-  const [tempTextPosition, setTempTextPosition] = useState(null);
   const [isDraggingSignature, setIsDraggingSignature] = useState(false);
   const [activeSignature, setActiveSignature] = useState(null);
   const [numPages, setNumPages] = useState(null);
@@ -50,12 +43,12 @@ const PDFEditor = () => {
   const [pdfError, setPdfError] = useState(null);
   const [useEmbedFallback, setUseEmbedFallback] = useState(false);
   const [signatureColor, setSignatureColor] = useState('#000000');
+  const [penSize, setPenSize] = useState(2);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // Refs for signature pad, PDF container, drawing canvas and its context
   const signatureRef = useRef(null);
   const pdfContainerRef = useRef(null);
-  const canvasRef = useRef(null);
-  const drawingContextRef = useRef(null);
   const signatureRefs = useRef({});
 
   // Modify history state to store actual states
@@ -82,105 +75,30 @@ const PDFEditor = () => {
     }
   }, [pdfFile]);
 
-  // Setup canvas for drawing mode
-  useEffect(() => {
-    if (drawingMode && canvasRef.current && pdfContainerRef.current) {
-      const pdfPage = pdfContainerRef.current.querySelector('.react-pdf__Page');
-      if (!pdfPage) return;
-      
-      const pdfRect = pdfPage.getBoundingClientRect();
-      const canvas = canvasRef.current;
-      
-      // Set canvas size to match the PDF page
-      canvas.width = pdfRect.width;
-      canvas.height = pdfRect.height;
-      
-      // Set canvas style position to match PDF
-      canvas.style.top = `${pdfRect.top - pdfContainerRef.current.getBoundingClientRect().top}px`;
-      canvas.style.left = `${pdfRect.left - pdfContainerRef.current.getBoundingClientRect().left}px`;
-      canvas.style.width = `${pdfRect.width}px`;
-      canvas.style.height = `${pdfRect.height}px`;
-      
-      const context = canvas.getContext('2d');
-      context.strokeStyle = '#000';
-      context.lineWidth = 2;
-      context.lineCap = 'round';
-      context.lineJoin = 'round';
-      drawingContextRef.current = context;
-    }
-  }, [drawingMode, scale, currentPage]);
-
   // Handle PDF container click for signatures or text
   const handlePdfClick = (event) => {
     if (!pdfContainerRef.current || !pdfUrl) return;
 
-    // Get the position of the PDF page
     const pdfPage = pdfContainerRef.current.querySelector('.react-pdf__Page');
     if (!pdfPage) return;
 
     const pdfRect = pdfPage.getBoundingClientRect();
     
-    // Check if click is within PDF page
     if (
       event.clientX < pdfRect.left || 
       event.clientX > pdfRect.right || 
       event.clientY < pdfRect.top || 
       event.clientY > pdfRect.bottom
     ) {
-      return; // Click outside the PDF page
+      return;
     }
 
-    // Calculate position relative to the PDF page
     const x = (event.clientX - pdfRect.left) / scale;
     const y = (event.clientY - pdfRect.top) / scale;
 
-    if (textMode) {
-      setTempTextPosition({ x, y });
-      setIsTextModalOpen(true);
-    } else if (!drawingMode) {
+    if (!drawingMode) {
       setTempSignaturePosition({ x, y });
       setIsSignatureModalOpen(true);
-    }
-  };
-
-  // Drawing handler for canvas
-  const handleDrawing = (event) => {
-    if (!drawingMode || !drawingContextRef.current || !canvasRef.current) return;
-    
-    const context = drawingContextRef.current;
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Get coordinates (handling both mouse and touch events)
-    let clientX, clientY;
-    if (event.type.startsWith('touch')) {
-      clientX = event.touches[0].clientX;
-      clientY = event.touches[0].clientY;
-      event.preventDefault(); // Prevent scrolling on touch
-    } else {
-      clientX = event.clientX;
-      clientY = event.clientY;
-    }
-    
-    // Check if pointer is within canvas bounds
-    if (
-      clientX < rect.left || 
-      clientX > rect.right || 
-      clientY < rect.top || 
-      clientY > rect.bottom
-    ) {
-      return;
-    }
-    
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-    
-    if (event.type === 'mousedown' || event.type === 'touchstart') {
-      context.beginPath();
-      context.moveTo(x, y);
-    } else if (event.type === 'mousemove' || event.type === 'touchmove') {
-      context.lineTo(x, y);
-      context.stroke();
     }
   };
 
@@ -282,31 +200,6 @@ const PDFEditor = () => {
       });
       setIsSignatureModalOpen(false);
       setTempSignaturePosition(null);
-    }
-  };
-
-  const confirmTextPlacement = () => {
-    if (tempTextPosition && textInput) {
-      const newAnnotation = {
-        id: Date.now(),
-        type: 'text',
-        content: textInput,
-        position: tempTextPosition,
-        page: currentPage,
-        fontSize: 16,
-        color: { r: 0, g: 0, b: 0 },
-        fontFamily: 'Helvetica'
-      };
-      setAnnotations(prev => {
-        const newAnnotations = [...prev, newAnnotation];
-        // Add to history after state update
-        setTimeout(() => addToHistory(), 0);
-        return newAnnotations;
-      });
-      setIsTextModalOpen(false);
-      setTempTextPosition(null);
-      setTextInput('');
-      setTextMode(false);
     }
   };
 
@@ -485,7 +378,7 @@ const PDFEditor = () => {
       }
       const displayRect = pdfPageElement.getBoundingClientRect();
 
-      // Add signatures to the PDF - process all signatures for all pages
+      // Add signatures to the PDF
       for (const sig of signatures) {
         const page = pages[sig.page - 1];
         if (!page) continue;
@@ -547,34 +440,6 @@ const PDFEditor = () => {
         }
       }
 
-      // Add drawings from canvas if in drawing mode
-      if (canvasRef.current && drawingMode) {
-        try {
-          const page = pages[currentPage - 1];
-          if (page) {
-            const { width: pageWidth, height: pageHeight } = page.getSize();
-            
-            // Get drawing as PNG
-            const drawingDataUrl = canvasRef.current.toDataURL('image/png');
-            const base64Data = drawingDataUrl.split(',')[1];
-            const drawingBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-            
-            // Embed the drawing
-            const drawingImg = await pdfDoc.embedPng(drawingBytes);
-            
-            // Draw the image on the whole page
-            page.drawImage(drawingImg, {
-              x: 0,
-              y: 0,
-              width: pageWidth,
-              height: pageHeight
-            });
-          }
-        } catch (error) {
-          console.error('Error adding drawing to PDF:', error);
-        }
-      }
-
       // Save and download the modified PDF
       const modifiedPdfBytes = await pdfDoc.save();
       const modifiedPdfBlob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
@@ -612,7 +477,6 @@ const PDFEditor = () => {
       setSignatureUrl(dataUrl);
       setIsDrawSignatureModalOpen(false);
       
-      // Create a new signature in the center of the visible PDF area
       const pdfPage = pdfContainerRef.current?.querySelector('.react-pdf__Page');
       if (pdfPage) {
         const pdfRect = pdfPage.getBoundingClientRect();
@@ -634,24 +498,12 @@ const PDFEditor = () => {
           return newSignatures;
         });
         setActiveSignature(newSignature);
-        setIsDraggingSignature(true);
       }
     }
   };
 
   const openDrawSignatureModal = () => {
     setIsDrawSignatureModalOpen(true);
-  };
-
-  // Mode toggles
-  const toggleDrawingMode = () => {
-    setDrawingMode(!drawingMode);
-    if (textMode) setTextMode(false);
-  };
-
-  const toggleTextMode = () => {
-    setTextMode(!textMode);
-    if (drawingMode) setDrawingMode(false);
   };
 
   // Page navigation
@@ -779,6 +631,26 @@ const PDFEditor = () => {
     }
   };
 
+  // Add function to update signature pad pen size
+  const updateSignaturePadSize = (size) => {
+    setPenSize(size);
+    if (signatureRef.current) {
+      signatureRef.current.dotSize = size;
+      signatureRef.current.minWidth = size;
+      signatureRef.current.maxWidth = size * 2;
+    }
+  };
+
+  // Add useEffect to handle responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <Container maxWidth={false} disableGutters sx={{ 
       height: '100vh', 
@@ -790,16 +662,47 @@ const PDFEditor = () => {
       padding: 0,
       maxWidth: 'none'
     }}>
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
-        <Typography variant="h4" component="h1" sx={{ textAlign: 'center', color: '#6366f1', fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box sx={{ 
+        p: { xs: 1, sm: 2 }, 
+        borderBottom: 1, 
+        borderColor: 'divider', 
+        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+        color: 'white',
+        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+      }} className="app-header">
+        <Typography variant="h4" component="h1" sx={{ 
+          textAlign: 'center', 
+          color: 'white', 
+          fontSize: { xs: '1.25rem', sm: '1.5rem', md: '2.5rem' }, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          fontWeight: 600,
+          letterSpacing: '0.5px'
+        }} className="app-title">
+          <CreateIcon sx={{ mr: 1, fontSize: { xs: '1.25rem', sm: '1.5rem', md: '2.5rem' } }} />
           Digital Signature Tool
           {pdfUrl && (
-            <IconButton onClick={handleRemovePdf} sx={{ ml: 2, color: '#ef4444' }}>
-              <DeleteIcon />
+            <IconButton onClick={handleRemovePdf} sx={{ 
+              ml: 1, 
+              color: 'rgba(255, 255, 255, 0.9)',
+              '&:hover': {
+                color: 'white',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)'
+              }
+            }}>
+              <DeleteIcon fontSize={isMobile ? "small" : "medium"} />
             </IconButton>
           )}
-          <IconButton onClick={toggleFullScreen} sx={{ ml: 2, color: '#6366f1' }}>
-            {isFullScreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+          <IconButton onClick={toggleFullScreen} sx={{ 
+            ml: 1, 
+            color: 'rgba(255, 255, 255, 0.9)',
+            '&:hover': {
+              color: 'white',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)'
+            }
+          }}>
+            {isFullScreen ? <FullscreenExitIcon fontSize={isMobile ? "small" : "medium"} /> : <FullscreenIcon fontSize={isMobile ? "small" : "medium"} />}
           </IconButton>
         </Typography>
       </Box>
@@ -860,12 +763,6 @@ const PDFEditor = () => {
                 </IconButton>
               </Box>
               <Box>
-                <IconButton onClick={toggleDrawingMode} sx={{ color: drawingMode ? 'primary.main' : 'action.active' }}>
-                  <BrushIcon />
-                </IconButton>
-                <IconButton onClick={toggleTextMode} sx={{ color: textMode ? 'primary.main' : 'action.active' }}>
-                  <TextFieldsIcon />
-                </IconButton>
                 <IconButton onClick={openDrawSignatureModal} sx={{ color: 'action.active' }}>
                   <CreateIcon />
                 </IconButton>
@@ -953,10 +850,10 @@ const PDFEditor = () => {
                       />
                     </Document>
                     
-                    {signatures.filter(sig => sig.page === currentPage).map((sig, index) => (
+                    {signatures.filter(sig => sig.page === currentPage).map((sig) => (
                       <div 
                         key={sig.id} 
-                        className={`signature-overlay ${activeSignature === sig ? 'active' : ''}`}
+                        className="signature-overlay"
                         style={{ 
                           position: 'absolute', 
                           left: `${sig.position.x}px`, 
@@ -964,12 +861,13 @@ const PDFEditor = () => {
                           transform: `rotate(${sig.rotation}deg)`, 
                           cursor: isDraggingSignature ? 'grabbing' : 'grab',
                           zIndex: activeSignature === sig ? 1001 : 1000,
+                          width: `${signatureSize.width}px`,
+                          height: `${signatureSize.height}px`,
                           userSelect: 'none',
-                          touchAction: 'none',
-                          '--signature-color-filter': sig.color ? `drop-shadow(0 0 0 ${sig.color})` : 'none'
+                          touchAction: 'none'
                         }}
                         ref={el => { if (el) signatureRefs.current[sig.id] = el; }}
-                        onMouseDown={(e) => handleMouseDown(e, sig)} 
+                        onMouseDown={(e) => handleMouseDown(e, sig)}
                         onTouchStart={(e) => handleTouchStart(e, sig)}
                         onDoubleClick={(e) => handleSignatureDoubleClick(e, sig)}
                       >
@@ -977,47 +875,29 @@ const PDFEditor = () => {
                           src={sig.url} 
                           alt="Signature" 
                           style={{ 
-                            width: signatureSize.width, 
-                            height: signatureSize.height, 
+                            width: '100%',
+                            height: '100%',
                             pointerEvents: 'none', 
                             userSelect: 'none',
                             display: 'block'
                           }} 
                         />
+
                         <IconButton
                           size="small"
                           onClick={(e) => handleSignatureDelete(e, sig.id)}
                           sx={{
                             position: 'absolute',
-                            top: -20,
-                            right: -20,
+                            top: '-20px',
+                            right: '-20px',
                             backgroundColor: 'white',
-                            '&:hover': {
-                              backgroundColor: '#f5f5f5'
-                            }
+                            '&:hover': { backgroundColor: '#f5f5f5' }
                           }}
                         >
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </div>
                     ))}
-                    
-                    {drawingMode && (
-                      <canvas ref={canvasRef} className="drawing-canvas"
-                        style={{ 
-                          position: 'absolute',
-                          pointerEvents: 'all',
-                          zIndex: 999,
-                          touchAction: 'none'
-                        }}
-                        onMouseDown={handleDrawing} 
-                        onMouseMove={handleDrawing} 
-                        onMouseUp={() => drawingContextRef.current?.closePath()}
-                        onTouchStart={handleDrawing} 
-                        onTouchMove={handleDrawing} 
-                        onTouchEnd={() => drawingContextRef.current?.closePath()} 
-                      />
-                    )}
                   </div>
                 ) : pdfUrl && useEmbedFallback ? (
                   // Fallback object/embed approach
@@ -1076,8 +956,14 @@ const PDFEditor = () => {
       </Box>
 
       {/* Draw signature modal */}
-      <Dialog open={isDrawSignatureModalOpen} onClose={() => setIsDrawSignatureModalOpen(false)}>
-        <DialogContent sx={{ textAlign: 'center', p: 3, width: { xs: '300px', sm: '400px' }, position: 'relative' }}>
+      <Dialog open={isDrawSignatureModalOpen} onClose={() => setIsDrawSignatureModalOpen(false)} maxWidth="sm" fullWidth={isMobile}>
+        <DialogContent sx={{ 
+          textAlign: 'center', 
+          p: { xs: 2, sm: 3 }, 
+          width: { xs: '100%', sm: '400px' }, 
+          maxWidth: '100%',
+          position: 'relative' 
+        }}>
           <IconButton
             onClick={() => setIsDrawSignatureModalOpen(false)}
             sx={{
@@ -1089,57 +975,93 @@ const PDFEditor = () => {
           >
             <CloseIcon />
           </IconButton>
-          <Typography variant="h6" gutterBottom>Draw Your Signature</Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>Draw Your Signature</Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             After saving, your signature will appear on the PDF and you can drag it to position it.
           </Typography>
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" sx={{ mb: 1 }}>Signature Color</Typography>
-            <input
-              type="color"
-              value={signatureColor}
-              onChange={(e) => updateSignaturePadColor(e.target.value)}
-              style={{ 
-                width: '50px', 
-                height: '50px', 
-                padding: '0',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                marginBottom: '16px'
-              }}
-            />
+          
+          {/* Color and Size Controls */}
+          <Box sx={{ 
+            display: 'flex', 
+            flexWrap: 'wrap',
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            mb: 2,
+            gap: 2
+          }}>
+            {/* Color Picker */}
+            <Box className="control-group">
+              <Typography variant="body2" sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                Signature Color
+              </Typography>
+              <input
+                type="color"
+                value={signatureColor}
+                onChange={(e) => updateSignaturePadColor(e.target.value)}
+                className="color-picker-input"
+                style={{ width: '50px', height: '40px' }}
+              />
+            </Box>
+            
+            {/* Pen Size Control */}
+            <Box className="control-group" sx={{ flexGrow: 1, maxWidth: { xs: '100%', sm: '60%' } }}>
+              <Typography variant="body2" sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                Pen Size: {penSize}px
+              </Typography>
+              <Slider
+                value={penSize}
+                min={1}
+                max={10}
+                step={1}
+                onChange={(_, newValue) => updateSignaturePadSize(newValue)}
+                sx={{ 
+                  color: signatureColor,
+                  '& .MuiSlider-thumb': {
+                    height: 16,
+                    width: 16,
+                    backgroundColor: '#fff',
+                    border: `2px solid ${signatureColor}`,
+                  },
+                  '& .MuiSlider-track': {
+                    height: 4,
+                  },
+                  '& .MuiSlider-rail': {
+                    height: 4,
+                    opacity: 0.5,
+                  },
+                }}
+              />
+            </Box>
           </Box>
-          <Box sx={{ height: '200px', mb: 2 }}>
+          
+          <Box sx={{ 
+            height: { xs: '150px', sm: '200px' }, 
+            mb: 2,
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            backgroundColor: '#fff'
+          }} className="signature-pad-container">
             <SignaturePad 
               ref={signatureRef} 
-              canvasProps={{ className: 'signature-canvas' }}
+              canvasProps={{ 
+                className: 'signature-canvas',
+                style: { width: '100%', height: '100%' } 
+              }}
               penColor={signatureColor}
+              dotSize={penSize}
+              minWidth={penSize}
+              maxWidth={penSize * 2}
             />
           </Box>
-          <Button variant="outlined" onClick={clearSignature} sx={{ mr: 1 }}>
-            Clear
-          </Button>
-          <Button variant="contained" onClick={saveSignature}>
-            Save & Place Signature
-          </Button>
-        </DialogContent>
-      </Dialog>
-
-      {/* Text input modal */}
-      <Dialog open={isTextModalOpen} onClose={() => setIsTextModalOpen(false)}>
-        <DialogContent sx={{ textAlign: 'center', p: 3 }}>
-          <Typography variant="h6" gutterBottom>Add Text</Typography>
-          <TextField 
-            fullWidth
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            margin="normal"
-            placeholder="Enter text..."
-          />
-          <Button variant="contained" onClick={confirmTextPlacement} disabled={!textInput}>
-            Add Text
-          </Button>
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+            <Button variant="outlined" onClick={clearSignature} size={isMobile ? "small" : "medium"}>
+              Clear
+            </Button>
+            <Button variant="contained" onClick={saveSignature} size={isMobile ? "small" : "medium"} className="action-button">
+              Save & Place
+            </Button>
+          </Box>
         </DialogContent>
       </Dialog>
     </Container>
