@@ -545,4 +545,18 @@ html, body, #root {
   font-size: 18px;
   color: #ef4444;
   background-color: rgba(255, 255, 255, 0.8);
+}
+
+.resize-handle {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.signature-overlay:hover .resize-handle,
+.signature-overlay.active .resize-handle {
+  opacity: 1;
+}
+
+.resize-handle:hover {
+  transform: scale(1.2);
 } 

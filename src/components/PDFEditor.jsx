@@ -43,6 +43,9 @@ const PDFEditor = () => {
   const [signatureColor, setSignatureColor] = useState('#000000');
   const [penSize, setPenSize] = useState(2);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [selectedSignature, setSelectedSignature] = useState(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStartData, setResizeStartData] = useState(null);
 
   // Refs for signature pad, PDF container, drawing canvas and its context
   const signatureRef = useRef(null);
@@ -392,15 +395,15 @@ const PDFEditor = () => {
           const pdfY = pageHeight - ((screenY / displayRect.height) * pageHeight) - signatureSize.height;
 
           // Calculate signature dimensions in PDF units
-          const sigWidth = (signatureSize.width / displayRect.width) * pageWidth;
-          const sigHeight = (signatureSize.height / displayRect.height) * pageHeight;
+          const sigWidth = (sig.size?.width || signatureSize.width) * (pageWidth / displayRect.width);
+          const sigHeight = (sig.size?.height || signatureSize.height) * (pageHeight / displayRect.height);
           
           // Draw the signature with proper positioning and rotation
           page.drawImage(sigImg, {
             x: pdfX,
             y: pdfY,
             width: sigWidth,
-            height: sigHeight,
+            height: sigHeight
           });
           
           console.log(`Added signature to page ${sig.page} at position (${pdfX}, ${pdfY}) with dimensions ${sigWidth}x${sigHeight}`);
@@ -479,7 +482,8 @@ const PDFEditor = () => {
           url: dataUrl,
           position: { x: centerX, y: centerY },
           page: currentPage,
-          color: signatureColor
+          color: signatureColor,
+          size: { ...signatureSize }  // Include initial size
         };
         
         setSignatures(prev => {
@@ -488,6 +492,7 @@ const PDFEditor = () => {
           return newSignatures;
         });
         setActiveSignature(newSignature);
+        setSelectedSignature(newSignature);
       }
     }
   };
@@ -641,6 +646,53 @@ const PDFEditor = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Add these new functions before the return statement
+  const handleResizeStart = (e, signature) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = signatureRefs.current[signature.id].getBoundingClientRect();
+    setIsResizing(true);
+    setResizeStartData({
+      startX: e.clientX,
+      startY: e.clientY,
+      startWidth: signature.size?.width || signatureSize.width,
+      startHeight: signature.size?.height || signatureSize.height,
+      ratio: (signature.size?.width || signatureSize.width) / (signature.size?.height || signatureSize.height)
+    });
+  };
+
+  const handleResize = (e) => {
+    if (!isResizing || !selectedSignature || !resizeStartData) return;
+    e.preventDefault();
+
+    const deltaX = e.clientX - resizeStartData.startX;
+    const newWidth = Math.max(50, resizeStartData.startWidth + deltaX);
+    const newHeight = newWidth / resizeStartData.ratio;
+
+    setSignatures(prev =>
+      prev.map(sig =>
+        sig.id === selectedSignature.id
+          ? {
+              ...sig,
+              size: {
+                width: newWidth,
+                height: newHeight
+              }
+            }
+          : sig
+      )
+    );
+  };
+
+  const handleResizeEnd = () => {
+    if (isResizing) {
+      setIsResizing(false);
+      setResizeStartData(null);
+      addToHistory();
+    }
+  };
+
   return (
     <Container maxWidth={false} disableGutters sx={{ 
       height: '100vh', 
@@ -713,11 +765,19 @@ const PDFEditor = () => {
           <Box 
             className={`pdf-container ${isFullScreen ? 'fullscreen' : ''}`}
             ref={pdfContainerRef} 
-            onClick={handlePdfClick}
-            onMouseMove={handleMouseMove} 
-            onMouseUp={handleMouseUp}
-            onTouchMove={handleTouchMove} 
-            onTouchEnd={handleTouchEnd}
+            onClick={() => setSelectedSignature(null)}
+            onMouseMove={(e) => {
+              handleMouseMove(e);
+              if (isResizing) handleResize(e);
+            }}
+            onMouseUp={() => {
+              handleMouseUp();
+              handleResizeEnd();
+            }}
+            onMouseLeave={() => {
+              handleMouseUp();
+              handleResizeEnd();
+            }}
             sx={{ 
               height: isFullScreen ? '100vh' : '100%', 
               width: isFullScreen ? '100vw' : '100%',
@@ -840,22 +900,28 @@ const PDFEditor = () => {
                     {signatures.filter(sig => sig.page === currentPage).map((sig) => (
                       <div 
                         key={sig.id} 
-                        className="signature-overlay"
+                        className={`signature-overlay ${selectedSignature?.id === sig.id ? 'active' : ''}`}
                         style={{ 
                           position: 'absolute', 
                           left: `${sig.position.x}px`, 
                           top: `${sig.position.y}px`, 
                           cursor: isDraggingSignature ? 'grabbing' : 'grab',
-                          zIndex: activeSignature === sig ? 1001 : 1000,
-                          width: `${signatureSize.width}px`,
-                          height: `${signatureSize.height}px`,
+                          zIndex: selectedSignature?.id === sig.id ? 1001 : 1000,
+                          width: `${sig.size?.width || signatureSize.width}px`,
+                          height: `${sig.size?.height || signatureSize.height}px`,
                           userSelect: 'none',
-                          touchAction: 'none'
+                          touchAction: 'none',
+                          border: selectedSignature?.id === sig.id ? '1px solid #6366f1' : 'none'
                         }}
                         ref={el => { if (el) signatureRefs.current[sig.id] = el; }}
-                        onMouseDown={(e) => handleMouseDown(e, sig)}
-                        onTouchStart={(e) => handleTouchStart(e, sig)}
-                        onDoubleClick={(e) => handleSignatureDoubleClick(e, sig)}
+                        onMouseDown={(e) => {
+                          handleMouseDown(e, sig);
+                          setSelectedSignature(sig);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSignature(sig);
+                        }}
                       >
                         <img 
                           src={sig.url} 
@@ -869,6 +935,26 @@ const PDFEditor = () => {
                           }} 
                         />
 
+                        {/* Resize handle */}
+                        {selectedSignature?.id === sig.id && (
+                          <div
+                            className="resize-handle"
+                            style={{
+                              position: 'absolute',
+                              bottom: '-6px',
+                              right: '-6px',
+                              width: '12px',
+                              height: '12px',
+                              backgroundColor: '#6366f1',
+                              borderRadius: '50%',
+                              cursor: 'se-resize',
+                              zIndex: 1002
+                            }}
+                            onMouseDown={(e) => handleResizeStart(e, sig)}
+                          />
+                        )}
+
+                        {/* Delete button */}
                         <IconButton
                           size="small"
                           onClick={(e) => handleSignatureDelete(e, sig.id)}
