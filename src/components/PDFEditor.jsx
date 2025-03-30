@@ -7,7 +7,6 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CreateIcon from '@mui/icons-material/Create';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
-import RotateRightIcon from '@mui/icons-material/RotateRight';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -33,7 +32,6 @@ const PDFEditor = () => {
   const [isDrawSignatureModalOpen, setIsDrawSignatureModalOpen] = useState(false);
   const [tempSignaturePosition, setTempSignaturePosition] = useState(null);
   const [annotations, setAnnotations] = useState([]);
-  const [rotation, setRotation] = useState(0);
   const [signatureSize] = useState({ width: 150, height: 50 });
   const [isDraggingSignature, setIsDraggingSignature] = useState(false);
   const [activeSignature, setActiveSignature] = useState(null);
@@ -190,7 +188,6 @@ const PDFEditor = () => {
         url: signatureUrl,
         position: tempSignaturePosition,
         page: currentPage,
-        rotation
       };
       setSignatures(prev => {
         const newSignatures = [...prev, newSignature];
@@ -201,11 +198,6 @@ const PDFEditor = () => {
       setIsSignatureModalOpen(false);
       setTempSignaturePosition(null);
     }
-  };
-
-  // Rotate signature
-  const rotateSignature = () => {
-    setRotation(prev => (prev + 90) % 360);
   };
 
   // Enhanced signature dragging handlers
@@ -409,7 +401,6 @@ const PDFEditor = () => {
             y: pdfY,
             width: sigWidth,
             height: sigHeight,
-            rotate: { type: 'degrees', angle: sig.rotation || 0 }
           });
           
           console.log(`Added signature to page ${sig.page} at position (${pdfX}, ${pdfY}) with dimensions ${sigWidth}x${sigHeight}`);
@@ -488,7 +479,6 @@ const PDFEditor = () => {
           url: dataUrl,
           position: { x: centerX, y: centerY },
           page: currentPage,
-          rotation: 0,
           color: signatureColor
         };
         
@@ -766,9 +756,6 @@ const PDFEditor = () => {
                 <IconButton onClick={openDrawSignatureModal} sx={{ color: 'action.active' }}>
                   <CreateIcon />
                 </IconButton>
-                <IconButton onClick={rotateSignature} sx={{ color: 'action.active' }}>
-                  <RotateRightIcon />
-                </IconButton>
                 <IconButton 
                   onClick={handleUndo} 
                   disabled={history.currentIndex <= 0}
@@ -858,7 +845,6 @@ const PDFEditor = () => {
                           position: 'absolute', 
                           left: `${sig.position.x}px`, 
                           top: `${sig.position.y}px`, 
-                          transform: `rotate(${sig.rotation}deg)`, 
                           cursor: isDraggingSignature ? 'grabbing' : 'grab',
                           zIndex: activeSignature === sig ? 1001 : 1000,
                           width: `${signatureSize.width}px`,
