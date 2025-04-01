@@ -269,6 +269,7 @@ const PDFEditor = () => {
     event.preventDefault();
     setIsDraggingSignature(true);
     setActiveSignature(signature);
+    setSelectedSignature(signature);
     
     // Store initial touch position relative to signature
     const signatureElement = signatureRefs.current[signature.id];
@@ -319,8 +320,11 @@ const PDFEditor = () => {
   };
 
   const handleTouchEnd = () => {
-    setIsDraggingSignature(false);
-    setActiveSignature(null);
+    if (isDraggingSignature && activeSignature) {
+      addToHistory();
+      setIsDraggingSignature(false);
+      setActiveSignature(null);
+    }
   };
 
   // Add signature copy functionality
@@ -918,6 +922,9 @@ const PDFEditor = () => {
                           handleMouseDown(e, sig);
                           setSelectedSignature(sig);
                         }}
+                        onTouchStart={(e) => handleTouchStart(e, sig)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedSignature(sig);
