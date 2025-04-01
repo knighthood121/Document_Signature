@@ -697,6 +697,46 @@ const PDFEditor = () => {
     }
   };
 
+  // Add these new touch resize handlers
+  const handleTouchResizeStart = (e, signature) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const touch = e.touches[0];
+    setIsResizing(true);
+    setResizeStartData({
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startWidth: signature.size?.width || signatureSize.width,
+      startHeight: signature.size?.height || signatureSize.height,
+      ratio: (signature.size?.width || signatureSize.width) / (signature.size?.height || signatureSize.height)
+    });
+  };
+
+  const handleTouchResize = (e) => {
+    if (!isResizing || !selectedSignature || !resizeStartData) return;
+    e.preventDefault();
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - resizeStartData.startX;
+    const newWidth = Math.max(50, resizeStartData.startWidth + deltaX);
+    const newHeight = newWidth / resizeStartData.ratio;
+
+    setSignatures(prev =>
+      prev.map(sig =>
+        sig.id === selectedSignature.id
+          ? {
+              ...sig,
+              size: {
+                width: newWidth,
+                height: newHeight
+              }
+            }
+          : sig
+      )
+    );
+  };
+
   return (
     <Container maxWidth={false} disableGutters sx={{ 
       height: '100vh', 
@@ -851,7 +891,16 @@ const PDFEditor = () => {
               width: '100%',
               margin: 0,
               padding: 0
-            }}>
+            }}
+            onTouchMove={(e) => {
+              handleTouchMove(e);
+              if (isResizing) handleTouchResize(e);
+            }}
+            onTouchEnd={() => {
+              handleTouchEnd();
+              handleResizeEnd();
+            }}
+            >
               {/* Zoom container */}
               <div style={{ 
                 transform: `scale(${scale})`, 
@@ -942,23 +991,39 @@ const PDFEditor = () => {
                           }} 
                         />
 
-                        {/* Resize handle */}
+                        {/* Updated Resize handle with touch support */}
                         {selectedSignature?.id === sig.id && (
                           <div
                             className="resize-handle"
                             style={{
                               position: 'absolute',
-                              bottom: '-6px',
-                              right: '-6px',
-                              width: '12px',
-                              height: '12px',
+                              bottom: '-12px', // Increased touch target
+                              right: '-12px',  // Increased touch target
+                              width: '24px',   // Increased touch target
+                              height: '24px',  // Increased touch target
                               backgroundColor: '#6366f1',
                               borderRadius: '50%',
                               cursor: 'se-resize',
-                              zIndex: 1002
+                              zIndex: 1002,
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center'
                             }}
                             onMouseDown={(e) => handleResizeStart(e, sig)}
-                          />
+                            onTouchStart={(e) => handleTouchResizeStart(e, sig)}
+                            onTouchMove={handleTouchResize}
+                            onTouchEnd={handleResizeEnd}
+                          >
+                            {/* Optional: Add visual indicator for resize handle */}
+                            <div
+                              style={{
+                                width: '12px',
+                                height: '12px',
+                                border: '2px solid white',
+                                borderRadius: '50%'
+                              }}
+                            />
+                          </div>
                         )}
 
                         {/* Delete button */}
@@ -970,6 +1035,7 @@ const PDFEditor = () => {
                             top: '-20px',
                             right: '-20px',
                             backgroundColor: 'white',
+                            padding: isMobile ? '12px' : '8px', // Increased touch target for mobile
                             '&:hover': { backgroundColor: '#f5f5f5' }
                           }}
                         >
